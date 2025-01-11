@@ -36,4 +36,12 @@ Example configuration:
 
 python
 
-`CONFIG =  {    "originBlacklist":  ["http://blocked-origin.com"],    "originWhitelist":  ["http://allowed-origin.com"],    "checkRateLimit":  lambda origin:  "Too many requests"  if origin ==  "http://rate-limited.com"  else  None,    "redirectSameOrigin":  True,    "requireHeader":  ["X-Custom-Header"],    "removeHeaders":  ["X-Remove-This"],    "setHeaders":  {"X-Added-Header":  "Value"},    "corsMaxAge":  3600,  }`
+`CONFIG =  {    
+"originBlacklist":  ["http://blocked-origin.com"],
+"originWhitelist":  ["http://allowed-origin.com"],    
+"checkRateLimit":  lambda origin:  "Too many requests"  if origin ==  "http://rate-limited.com"  else  None,    
+"redirectSameOrigin":  True,
+"requireHeader":  ["X-Custom-Header"],
+"removeHeaders":  ["X-Remove-This"],
+"setHeaders":  {"X-Added-Header":  "Value"},
+"corsMaxAge":  3600,  }`
