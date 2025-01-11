@@ -9,6 +9,18 @@ import sys
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
 ENABLE_LOGGING = True  # Set to False to disable logging
 
+# Feature configurations
+CONFIG = {
+    "originBlacklist": [],           # Requests from these origins will be blocked.
+    "originWhitelist": [],           # If non-empty, requests not from an origin in this list will be blocked.
+    "checkRateLimit": None,          # Function that may enforce a rate-limit by returning a non-empty string.
+    "redirectSameOrigin": False,     # Redirect the client to the requested URL for same-origin requests.
+    "requireHeader": None,           # Require a header to be set?
+    "removeHeaders": [],             # Strip these request headers.
+    "setHeaders": {},                # Set these request headers.
+    "corsMaxAge": 0,                 # Access-Control-Max-Age header value (in seconds).
+}
+
 # Configure logging
 if ENABLE_LOGGING:
     logging.basicConfig(
@@ -49,8 +61,33 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
                 logger.error(f"Invalid URL: {target_url}")
             return
 
+        origin = self.headers.get('Origin', '')
+
+        # Origin blacklist check
+        if origin in CONFIG["originBlacklist"]:
+            self.send_error(403, f"The origin '{origin}' is blacklisted.")
+            if ENABLE_LOGGING:
+                logger.warning(f"Blocked blacklisted origin: {origin}")
+            return
+
+        # Origin whitelist check
+        if CONFIG["originWhitelist"] and origin not in CONFIG["originWhitelist"]:
+            self.send_error(403, f"The origin '{origin}' is not whitelisted.")
+            if ENABLE_LOGGING:
+                logger.warning(f"Blocked non-whitelisted origin: {origin}")
+            return
+
+        # Rate limit check
+        if CONFIG["checkRateLimit"]:
+            rate_limit_message = CONFIG["checkRateLimit"](origin)
+            if rate_limit_message:
+                self.send_error(429, f"Rate limit exceeded: {rate_limit_message}")
+                if ENABLE_LOGGING:
+                    logger.warning(f"Rate limit exceeded for origin: {origin}")
+                return
+
         try:
-            response = self.forward_request(target_url)
+            response = self.forward_request(target_url, origin)
             self.send_response(response.status)
             for header, value in response.getheaders():
                 if header.lower() not in ['content-length', 'transfer-encoding', 'connection']:
@@ -65,30 +102,39 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             if ENABLE_LOGGING:
                 logger.error(f"Error while processing request for {target_url}: {str(e)}")
 
-    def forward_request(self, url, redirect_count=0):
+    def forward_request(self, url, origin=None):
         """Forwards the request to the target server, handling redirects."""
-        if redirect_count > MAX_REDIRECTS:
-            raise Exception("Too many redirects")
-
         parsed_url = urlparse(url)
         connection_class = http.client.HTTPSConnection if parsed_url.scheme == 'https' else http.client.HTTPConnection
         conn = connection_class(parsed_url.netloc)
 
-        # Forward headers
-        headers = {key: value for key, value in self.headers.items() if key.lower() not in ['host']}
+        # Remove headers specified in configuration
+        for header in CONFIG["removeHeaders"]:
+            if header in self.headers:
+                del self.headers[header]
+
+        # Add headers specified in configuration
+        headers = {key: value for key, value in self.headers.items()}
+        headers.update(CONFIG["setHeaders"])
+
         conn.request(self.command, parsed_url.path + ('?' + parsed_url.query if parsed_url.query else ''), headers=headers)
 
         response = conn.getresponse()
 
-        # Handle redirects (301, 302, 303, 307, 308)
-        if response.status in [301, 302, 303, 307, 308]:
+        # Handle redirects (301, 302, 303)
+        if response.status in [301, 302, 303]:
             location = response.getheader('Location')
             if not location:
                 raise Exception("Redirect without Location header")
             new_url = urljoin(url, location)  # Resolve relative redirects
-            if ENABLE_LOGGING:
-                logger.info(f"Redirecting to {new_url} (status: {response.status})")
-            return self.forward_request(new_url, redirect_count + 1)
+
+            if CONFIG["redirectSameOrigin"] and origin and new_url.startswith(origin):
+                self.send_response(301)
+                self.send_header('Location', new_url)
+                self.end_headers()
+                return None
+
+            return self.forward_request(new_url)
 
         return response
 
@@ -97,15 +143,15 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        self.send_header('Access-Control-Expose-Headers', '*')
-
+        
+        if CONFIG["corsMaxAge"] > 0:
+            self.send_header('Access-Control-Max-Age', str(CONFIG["corsMaxAge"]))
 
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
 
-    # Gracefully handle Ctrl+C
     def signal_handler(sig, frame):
         print("\nShutting down the server...")
         httpd.server_close()
