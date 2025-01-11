@@ -1,18 +1,28 @@
 import http.server
-import urllib.request
+import signal
 from urllib.parse import urlparse, urljoin
+import http.client
+import sys
 
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
 
-class RedirectHandlingProxy(http.server.BaseHTTPRequestHandler):
+class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        """Handle preflight (OPTIONS) requests."""
+        self.send_response(200)
+        self.add_cors_headers()
+        self.end_headers()
+
     def do_GET(self):
-        self.handle_request()
+        """Handle GET requests."""
+        self.proxy_request()
 
     def do_POST(self):
-        self.handle_request()
+        """Handle POST requests."""
+        self.proxy_request()
 
-    def handle_request(self):
-        """Handles incoming requests and forwards them to the target server."""
+    def proxy_request(self):
+        """Forward the request to the target server."""
         target_url = self.path[1:]  # Remove leading '/'
         if not target_url.startswith(('http://', 'https://')):
             self.send_error(400, "Invalid URL")
@@ -24,6 +34,7 @@ class RedirectHandlingProxy(http.server.BaseHTTPRequestHandler):
             for header, value in response.getheaders():
                 if header.lower() not in ['content-length', 'transfer-encoding', 'connection']:
                     self.send_header(header, value)
+            self.add_cors_headers()
             self.end_headers()
             self.wfile.write(response.read())
         except Exception as e:
@@ -54,12 +65,28 @@ class RedirectHandlingProxy(http.server.BaseHTTPRequestHandler):
 
         return response
 
+    def add_cors_headers(self):
+        """Add CORS headers to the response."""
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Expose-Headers', '*')
 
-def run(server_class=http.server.HTTPServer, handler_class=RedirectHandlingProxy, port=8080):
+
+def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"Starting CORS Proxy on port {port}...")
+
+    # Gracefully handle Ctrl+C
+    def signal_handler(sig, frame):
+        print("\nShutting down the server...")
+        httpd.server_close()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
     httpd.serve_forever()
 
 
