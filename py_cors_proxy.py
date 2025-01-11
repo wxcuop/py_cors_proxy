@@ -1,24 +1,43 @@
 import http.server
-import signal
-from urllib.parse import urlparse, urljoin
 import http.client
+from urllib.parse import urlparse, urljoin
+import logging
+import signal
 import sys
 
+# Configuration
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
+ENABLE_LOGGING = True  # Set to False to disable logging
+
+# Configure logging
+if ENABLE_LOGGING:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+logger = logging.getLogger(__name__)
+
 
 class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Handle preflight (OPTIONS) requests."""
+        if ENABLE_LOGGING:
+            logger.info(f"OPTIONS request received for {self.path}")
         self.send_response(200)
         self.add_cors_headers()
         self.end_headers()
 
     def do_GET(self):
         """Handle GET requests."""
+        if ENABLE_LOGGING:
+            logger.info(f"GET request received for {self.path}")
         self.proxy_request()
 
     def do_POST(self):
         """Handle POST requests."""
+        if ENABLE_LOGGING:
+            logger.info(f"POST request received for {self.path}")
         self.proxy_request()
 
     def proxy_request(self):
@@ -26,6 +45,8 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         target_url = self.path[1:]  # Remove leading '/'
         if not target_url.startswith(('http://', 'https://')):
             self.send_error(400, "Invalid URL")
+            if ENABLE_LOGGING:
+                logger.error(f"Invalid URL: {target_url}")
             return
 
         try:
@@ -37,8 +58,12 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             self.add_cors_headers()
             self.end_headers()
             self.wfile.write(response.read())
+            if ENABLE_LOGGING:
+                logger.info(f"Response forwarded with status {response.status} for {target_url}")
         except Exception as e:
             self.send_error(500, f"Error: {str(e)}")
+            if ENABLE_LOGGING:
+                logger.error(f"Error while processing request for {target_url}: {str(e)}")
 
     def forward_request(self, url, redirect_count=0):
         """Forwards the request to the target server, handling redirects."""
@@ -61,6 +86,8 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             if not location:
                 raise Exception("Redirect without Location header")
             new_url = urljoin(url, location)  # Resolve relative redirects
+            if ENABLE_LOGGING:
+                logger.info(f"Redirecting to {new_url} (status: {response.status})")
             return self.forward_request(new_url, redirect_count + 1)
 
         return response
@@ -87,6 +114,8 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     signal.signal(signal.SIGINT, signal_handler)
 
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
+    if ENABLE_LOGGING:
+        logger.info("CORS Proxy started on port %d", port)
     httpd.serve_forever()
 
 
