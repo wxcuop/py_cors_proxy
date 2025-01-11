@@ -1,88 +1,67 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from http.client import HTTPConnection
-from urllib.parse import urlparse
-import logging
+import http.server
+import urllib.request
+from urllib.parse import urlparse, urljoin
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+MAX_REDIRECTS = 5  # Maximum number of redirects allowed
 
-
-class ProxyRequestHandler(BaseHTTPRequestHandler):
-    def _set_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-target-url")
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._set_cors_headers()
-        self.end_headers()
-
+class RedirectHandlingProxy(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.handle_request()
 
     def do_POST(self):
         self.handle_request()
 
-    def do_PUT(self):
-        self.handle_request()
-
-    def do_DELETE(self):
-        self.handle_request()
-
     def handle_request(self):
-        parsed_url = urlparse(self.path)
-        query = parsed_url.query
-        target_url = self.headers.get("x-target-url")
-
-        if not target_url:
-            self.send_error(400, "Missing x-target-url header")
-            logging.error("Request missing x-target-url header")
+        """Handles incoming requests and forwards them to the target server."""
+        target_url = self.path[1:]  # Remove leading '/'
+        if not target_url.startswith(('http://', 'https://')):
+            self.send_error(400, "Invalid URL")
             return
 
-        parsed_target = urlparse(target_url)
-        path_with_query = parsed_target.path
-        if query:
-            path_with_query += "?" + query
-
-        logging.info(f"Forwarding {self.command} request to {target_url}")
-
-        # Set up the connection to the target server
-        connection = HTTPConnection(parsed_target.netloc, timeout=10)
-
-        # Forward request headers and body
-        headers = {key: value for key, value in self.headers.items() if key.lower() != "host"}
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length) if content_length > 0 else None
-
         try:
-            # Forward the request to the target
-            connection.request(self.command, path_with_query, body, headers)
-            response = connection.getresponse()
-
-            # Send response back to the client
+            response = self.forward_request(target_url)
             self.send_response(response.status)
             for header, value in response.getheaders():
-                self.send_header(header, value)
-            self._set_cors_headers()
+                if header.lower() not in ['content-length', 'transfer-encoding', 'connection']:
+                    self.send_header(header, value)
             self.end_headers()
-
-            # Stream response data
-            while chunk := response.read(8192):
-                self.wfile.write(chunk)
+            self.wfile.write(response.read())
         except Exception as e:
-            self.send_error(502, f"Error forwarding request: {str(e)}")
-            logging.error(f"Error forwarding request: {e}")
-        finally:
-            connection.close()
+            self.send_error(500, f"Error: {str(e)}")
+
+    def forward_request(self, url, redirect_count=0):
+        """Forwards the request to the target server, handling redirects."""
+        if redirect_count > MAX_REDIRECTS:
+            raise Exception("Too many redirects")
+
+        parsed_url = urlparse(url)
+        connection_class = http.client.HTTPSConnection if parsed_url.scheme == 'https' else http.client.HTTPConnection
+        conn = connection_class(parsed_url.netloc)
+
+        # Forward headers
+        headers = {key: value for key, value in self.headers.items() if key.lower() not in ['host']}
+        conn.request(self.command, parsed_url.path + ('?' + parsed_url.query if parsed_url.query else ''), headers=headers)
+
+        response = conn.getresponse()
+
+        # Handle redirects (301, 302, 303, 307, 308)
+        if response.status in [301, 302, 303, 307, 308]:
+            location = response.getheader('Location')
+            if not location:
+                raise Exception("Redirect without Location header")
+            new_url = urljoin(url, location)  # Resolve relative redirects
+            return self.forward_request(new_url, redirect_count + 1)
+
+        return response
 
 
-if __name__ == "__main__":
-    server_address = ("", 8080)  # Listen on all interfaces at port 8080
-    httpd = HTTPServer(server_address, ProxyRequestHandler)
-    logging.info("Proxy server is running on port 8080")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        logging.info("Shutting down the server...")
-        httpd.server_close()
+def run(server_class=http.server.HTTPServer, handler_class=RedirectHandlingProxy, port=8080):
+    """Run the CORS proxy server."""
+    server_address = ('', port)
+    httpd = server_class(server_address, handler_class)
+    print(f"Starting CORS Proxy on port {port}...")
+    httpd.serve_forever()
+
+
+if __name__ == '__main__':
+    run()
