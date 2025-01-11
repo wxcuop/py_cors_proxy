@@ -27,3 +27,13 @@
 6\. **how to use**:
 
    - Access the proxy at `http://localhost:8080/<target_url>`.
+
+How to Configure
+----------------
+
+Modify the `CONFIG` dictionary at the top of the script to enable or customize each feature.
+Example configuration:
+
+python
+
+`CONFIG =  {    "originBlacklist":  ["http://blocked-origin.com"],    "originWhitelist":  ["http://allowed-origin.com"],    "checkRateLimit":  lambda origin:  "Too many requests"  if origin ==  "http://rate-limited.com"  else  None,    "redirectSameOrigin":  True,    "requireHeader":  ["X-Custom-Header"],    "removeHeaders":  ["X-Remove-This"],    "setHeaders":  {"X-Added-Header":  "Value"},    "corsMaxAge":  3600,  }`
