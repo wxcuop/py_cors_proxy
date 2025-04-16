@@ -4,6 +4,8 @@ from urllib.parse import urlparse, urljoin
 import logging
 import signal
 import sys
+import ssl
+import zlib
 
 # Configuration
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
@@ -11,14 +13,14 @@ ENABLE_LOGGING = True  # Set to False to disable logging
 
 # Feature configurations
 CONFIG = {
-    "originBlacklist": [],           # Requests from these origins will be blocked.
-    "originWhitelist": [],           # If non-empty, requests not from an origin in this list will be blocked.
-    "checkRateLimit": None,          # Function that may enforce a rate-limit by returning a non-empty string.
-    "redirectSameOrigin": False,     # Redirect the client to the requested URL for same-origin requests.
-    "requireHeader": None,           # Require a header to be set?
-    "removeHeaders": [],             # Strip these request headers.
-    "setHeaders": {},                # Set these request headers.
-    "corsMaxAge": 0,                 # Access-Control-Max-Age header value (in seconds).
+    "originBlacklist": [],
+    "originWhitelist": [],
+    "checkRateLimit": None,
+    "redirectSameOrigin": False,
+    "requireHeader": None,
+    "removeHeaders": [],
+    "setHeaders": {},
+    "corsMaxAge": 3600,  # Set Access-Control-Max-Age to 1 hour
 }
 
 # Configure logging
@@ -29,6 +31,7 @@ if ENABLE_LOGGING:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 logger = logging.getLogger(__name__)
+
 
 class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -53,7 +56,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def proxy_request(self):
         """Forward the request to the target server."""
-        target_url = self.path.lstrip('/')  # Remove all leading slashes
+        target_url = self.path.lstrip('/')
         if not target_url.startswith(('http://', 'https://')):
             self.send_error(400, "Invalid URL")
             if ENABLE_LOGGING:
@@ -76,29 +79,24 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
                 logger.warning(f"Blocked non-whitelisted origin: {origin}")
             return
 
-        # Rate limit check
-        if CONFIG["checkRateLimit"]:
-            rate_limit_message = CONFIG["checkRateLimit"](origin)
-            if rate_limit_message:
-                self.send_error(429, f"Rate limit exceeded: {rate_limit_message}")
-                if ENABLE_LOGGING:
-                    logger.warning(f"Rate limit exceeded for origin: {origin}")
-                return
-
         try:
-            response = self.forward_request(target_url, origin)
+            response = self.forward_request(target_url)
             self.send_response(response.status)
             for header, value in response.getheaders():
                 if header.lower() not in ['content-length', 'transfer-encoding', 'connection']:
                     self.send_header(header, value)
             self.add_cors_headers()
             self.end_headers()
-            
-            #self.wfile.write(response.read())
-            # Stream the response body to the client
-            while chunk := response.read(8192):  # Read in chunks of 8 KB
+
+            # Stream the response body
+            content_encoding = response.getheader('Content-Encoding', '')
+            while chunk := response.read(8192):
+                if content_encoding == 'gzip':
+                    chunk = zlib.decompress(chunk, zlib.MAX_WBITS | 16)
+                elif content_encoding == 'deflate':
+                    chunk = zlib.decompress(chunk)
                 self.wfile.write(chunk)
-            
+
             if ENABLE_LOGGING:
                 logger.info(f"Response forwarded with status {response.status} for {target_url}")
         except Exception as e:
@@ -112,7 +110,6 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         connection_class = http.client.HTTPSConnection if parsed_url.scheme == 'https' else http.client.HTTPConnection
         conn = connection_class(parsed_url.netloc)
 
-        # Log the parsed URL for debugging
         if ENABLE_LOGGING:
             logger.info(f"Parsed URL: scheme={parsed_url.scheme}, netloc={parsed_url.netloc}, path={parsed_url.path}, query={parsed_url.query}")
 
@@ -134,18 +131,14 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
         # Ensure the Host header is set correctly
         headers['Host'] = parsed_url.netloc
-        # Remove the Connection header
-        headers.pop('Connection', None)
+
         # Build the full path for the request
         full_path = parsed_url.path + ('?' + parsed_url.query if parsed_url.query else '')
 
-        # Log the final headers and path for debugging
         if ENABLE_LOGGING:
             logger.info(f"Forwarding request: method={self.command}, path={full_path}, headers={headers}")
 
-        # Forward the request
         conn.request(self.command, full_path, headers=headers)
-
         response = conn.getresponse()
 
         # Handle redirects (301, 302, 303)
@@ -153,16 +146,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             location = response.getheader('Location')
             if not location:
                 raise Exception("Redirect without Location header")
-            new_url = urljoin(url, location)  # Resolve relative redirects
-
-            # If redirecting to the same origin and configured to redirect, perform the redirect
-            if CONFIG["redirectSameOrigin"] and origin and new_url.startswith(origin):
-                self.send_response(301)
-                self.send_header('Location', new_url)
-                self.end_headers()
-                return None
-
-            # Otherwise, recursively handle the redirect
+            new_url = urljoin(url, location)
             return self.forward_request(new_url)
 
         return response
@@ -172,7 +156,6 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
         if CONFIG["corsMaxAge"] > 0:
             self.send_header('Access-Control-Max-Age', str(CONFIG["corsMaxAge"]))
 
