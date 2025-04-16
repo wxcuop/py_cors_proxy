@@ -30,7 +30,6 @@ if ENABLE_LOGGING:
     )
 logger = logging.getLogger(__name__)
 
-
 class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Handle preflight (OPTIONS) requests."""
