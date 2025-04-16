@@ -93,7 +93,12 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header(header, value)
             self.add_cors_headers()
             self.end_headers()
-            self.wfile.write(response.read())
+            
+            #self.wfile.write(response.read())
+            # Stream the response body to the client
+            while chunk := response.read(8192):  # Read in chunks of 8 KB
+                self.wfile.write(chunk)
+            
             if ENABLE_LOGGING:
                 logger.info(f"Response forwarded with status {response.status} for {target_url}")
         except Exception as e:
@@ -129,7 +134,8 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
         # Ensure the Host header is set correctly
         headers['Host'] = parsed_url.netloc
-
+        # Remove the Connection header
+        headers.pop('Connection', None)
         # Build the full path for the request
         full_path = parsed_url.path + ('?' + parsed_url.query if parsed_url.query else '')
 
