@@ -51,32 +51,31 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         if ENABLE_LOGGING:
             logger.info(f"POST request received for {self.path}")
         self.proxy_request()
-
     def proxy_request(self):
         """Forward the request to the target server."""
-        target_url = self.path[1:]  # Remove leading '/'
+        target_url = self.path.lstrip('/')  # Remove all leading slashes
         if not target_url.startswith(('http://', 'https://')):
             self.send_error(400, "Invalid URL")
             if ENABLE_LOGGING:
                 logger.error(f"Invalid URL: {target_url}")
             return
-
+    
         origin = self.headers.get('Origin', '')
-
+    
         # Origin blacklist check
         if origin in CONFIG["originBlacklist"]:
             self.send_error(403, f"The origin '{origin}' is blacklisted.")
             if ENABLE_LOGGING:
                 logger.warning(f"Blocked blacklisted origin: {origin}")
             return
-
+    
         # Origin whitelist check
         if CONFIG["originWhitelist"] and origin not in CONFIG["originWhitelist"]:
             self.send_error(403, f"The origin '{origin}' is not whitelisted.")
             if ENABLE_LOGGING:
                 logger.warning(f"Blocked non-whitelisted origin: {origin}")
             return
-
+    
         # Rate limit check
         if CONFIG["checkRateLimit"]:
             rate_limit_message = CONFIG["checkRateLimit"](origin)
@@ -85,7 +84,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
                 if ENABLE_LOGGING:
                     logger.warning(f"Rate limit exceeded for origin: {origin}")
                 return
-
+    
         try:
             response = self.forward_request(target_url, origin)
             self.send_response(response.status)
@@ -101,7 +100,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, f"Error: {str(e)}")
             if ENABLE_LOGGING:
                 logger.error(f"Error while processing request for {target_url}: {str(e)}")
-
+                
     def forward_request(self, url, origin=None):
         """Forwards the request to the target server, handling redirects."""
         parsed_url = urlparse(url)
