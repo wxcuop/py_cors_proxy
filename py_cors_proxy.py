@@ -156,14 +156,37 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Credentials', 'true')
         if CONFIG["corsMaxAge"] > 0:
             self.send_header('Access-Control-Max-Age', str(CONFIG["corsMaxAge"]))
 
 
-def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
-    """Run the CORS proxy server."""
+def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080, use_https=False):
+    """
+    Run the CORS proxy server.
+    
+    :param server_class: The server class to use.
+    :param handler_class: The request handler class to use.
+    :param port: The port number to start the server on.
+    :param use_https: Whether to enable HTTPS.
+    """
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
+
+    if use_https:
+        import ssl
+        # Replace these paths with the actual paths to your SSL certificate and key
+        cert_file = "path/to/cert.pem"
+        key_file = "path/to/key.pem"
+        httpd.socket = ssl.wrap_socket(
+            httpd.socket,
+            keyfile=key_file,
+            certfile=cert_file,
+            server_side=True
+        )
+        protocol = "HTTPS"
+    else:
+        protocol = "HTTP"
 
     def signal_handler(sig, frame):
         print("\nShutting down the server...")
@@ -172,11 +195,10 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
+    print(f"Starting CORS Proxy on port {port} using {protocol}... Press Ctrl+C to stop.")
     if ENABLE_LOGGING:
-        logger.info("CORS Proxy started on port %d", port)
+        logger.info("CORS Proxy started on port %d using %s", port, protocol)
     httpd.serve_forever()
-
 
 if __name__ == '__main__':
     run()
