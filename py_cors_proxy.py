@@ -107,37 +107,43 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         parsed_url = urlparse(url)
         connection_class = http.client.HTTPSConnection if parsed_url.scheme == 'https' else http.client.HTTPConnection
         conn = connection_class(parsed_url.netloc)
-
+    
         # Remove headers specified in configuration
         for header in CONFIG["removeHeaders"]:
             if header in self.headers:
                 del self.headers[header]
-
+    
         # Add headers specified in configuration
         headers = {key: value for key, value in self.headers.items()}
         headers.update(CONFIG["setHeaders"])
-
+    
+        # Set a default User-Agent if not present
+        if 'User-Agent' not in headers:
+            headers['User-Agent'] = (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            )
+    
         conn.request(self.command, parsed_url.path + ('?' + parsed_url.query if parsed_url.query else ''), headers=headers)
-
+    
         response = conn.getresponse()
-
+    
         # Handle redirects (301, 302, 303)
         if response.status in [301, 302, 303]:
             location = response.getheader('Location')
             if not location:
                 raise Exception("Redirect without Location header")
             new_url = urljoin(url, location)  # Resolve relative redirects
-
+    
             if CONFIG["redirectSameOrigin"] and origin and new_url.startswith(origin):
                 self.send_response(301)
                 self.send_header('Location', new_url)
                 self.end_headers()
                 return None
-
+    
             return self.forward_request(new_url)
-
+    
         return response
-
     def add_cors_headers(self):
         """Add CORS headers to the response."""
         self.send_header('Access-Control-Allow-Origin', '*')
