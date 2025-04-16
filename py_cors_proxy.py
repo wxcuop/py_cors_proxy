@@ -176,8 +176,8 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     if use_https:
         import ssl
         # Replace these paths with the actual paths to your SSL certificate and key
-        cert_file = "path/to/cert.pem"
-        key_file = "path/to/key.pem"
+        cert_file = "cert.pem"
+        key_file = "key.pem"
         httpd.socket = ssl.wrap_socket(
             httpd.socket,
             keyfile=key_file,
