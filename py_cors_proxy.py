@@ -4,7 +4,6 @@ from urllib.parse import urlparse, urljoin
 import logging
 import signal
 import sys
-import ssl
 import zlib
 import json
 
