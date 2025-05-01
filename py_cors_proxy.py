@@ -198,17 +198,5 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
         logger.info("CORS Proxy started on port %d using %s", port, protocol)
     httpd.serve_forever()
 
-    def signal_handler(sig, frame):
-        print("\nShutting down the server...")
-        httpd.server_close()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-
-    print(f"Starting CORS Proxy on port {port} using {protocol}... Press Ctrl+C to stop.")
-    if ENABLE_LOGGING:
-        logger.info("CORS Proxy started on port %d using %s", port, protocol)
-    httpd.serve_forever()
-
 if __name__ == '__main__':
     run(use_https=True)
