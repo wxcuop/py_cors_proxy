@@ -159,8 +159,6 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Credentials', 'true')
         if CONFIG["corsMaxAge"] > 0:
             self.send_header('Access-Control-Max-Age', str(CONFIG["corsMaxAge"]))
-
-
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080, use_https=False):
     """
     Run the CORS proxy server.
@@ -175,15 +173,15 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
 
     if use_https:
         import ssl
-        # Replace these paths with the actual paths to your SSL certificate and key
-        cert_file = "cert.pem"
-        key_file = "key.pem"
-        httpd.socket = ssl.wrap_socket(
-            httpd.socket,
-            keyfile=key_file,
-            certfile=cert_file,
-            server_side=True
-        )
+        # Create an SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        # Load the certificate and private key
+        cert_file = "cert.pem"  # Replace with the path to your certificate
+        key_file = "key.pem"    # Replace with the path to your private key
+        context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+
+        # Wrap the server's socket with the SSL context
+        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         protocol = "HTTPS"
     else:
         protocol = "HTTP"
@@ -200,5 +198,17 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
         logger.info("CORS Proxy started on port %d using %s", port, protocol)
     httpd.serve_forever()
 
+    def signal_handler(sig, frame):
+        print("\nShutting down the server...")
+        httpd.server_close()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    print(f"Starting CORS Proxy on port {port} using {protocol}... Press Ctrl+C to stop.")
+    if ENABLE_LOGGING:
+        logger.info("CORS Proxy started on port %d using %s", port, protocol)
+    httpd.serve_forever()
+
 if __name__ == '__main__':
-    run()
+    run(use_https=True)
