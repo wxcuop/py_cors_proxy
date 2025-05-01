@@ -6,6 +6,7 @@ import signal
 import sys
 import ssl
 import zlib
+import json
 
 # Configuration
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
@@ -56,6 +57,10 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def proxy_request(self):
         """Forward the request to the target server or return a health check."""
+        if self.path == "/favicon.ico":
+            self.send_response(204)  # No Content
+            self.end_headers()
+            return 
         target_url = self.path.lstrip('/')
         
         # Health check: Return a 200 response if no target URL is provided
@@ -218,4 +223,4 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     httpd.serve_forever()
 
 if __name__ == '__main__':
-    run(use_https=True)
+    run(use_https=False)
