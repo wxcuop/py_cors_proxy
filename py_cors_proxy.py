@@ -221,6 +221,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
         return False
 
+shutdown_event = threading.Event()  # Event to signal shutdown
 
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
@@ -245,15 +246,16 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
         server_running = False
         httpd.shutdown()
         httpd.server_close()
+        shutdown_event.set()  # Signal the shutdown event
         server_thread.join()
         print("Server stopped.")
 
-    # Dedicated thread to listen for shutdown signals
+    # Listen for shutdown signals
     def shutdown_listener():
         while server_running:
             try:
-                # Wait for SIGINT (Ctrl+C) or other signals
-                signal.pause()
+                # Wait until the shutdown event is set
+                shutdown_event.wait()
             except KeyboardInterrupt:
                 stop_server()
                 break
@@ -268,6 +270,6 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
 
     # Wait for the server thread to finish
     server_thread.join()
-
+    
 if __name__ == "__main__":
     run()
