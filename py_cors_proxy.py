@@ -222,7 +222,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         return False
 
 
-def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080, use_https=False):
+def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
     global server_running
     server_running = True  # Flag to check if the server is running
@@ -230,7 +230,7 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     server_address = ("", port)
     httpd = server_class(server_address, handler_class)
 
-    # Use a thread to run the server so that it can be stopped cleanly
+    # Start the server in a separate thread
     def serve_forever():
         with httpd:
             httpd.serve_forever()
@@ -238,21 +238,36 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     server_thread = threading.Thread(target=serve_forever)
     server_thread.start()
 
-    def signal_handler(sig, frame):
+    # Signal handler to stop the server
+    def stop_server():
         global server_running
-        server_running = False
         print("\nShutting down the server...")
-        httpd.shutdown()  # Stop the server
-        server_thread.join()  # Wait for the server thread to finish
-        sys.exit(0)
+        server_running = False
+        httpd.shutdown()
+        httpd.server_close()
+        server_thread.join()
+        print("Server stopped.")
 
-    signal.signal(signal.SIGINT, signal_handler)
+    # Dedicated thread to listen for shutdown signals
+    def shutdown_listener():
+        while server_running:
+            try:
+                # Wait for SIGINT (Ctrl+C) or other signals
+                signal.pause()
+            except KeyboardInterrupt:
+                stop_server()
+                break
+
+    shutdown_thread = threading.Thread(target=shutdown_listener)
+    shutdown_thread.daemon = True
+    shutdown_thread.start()
 
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
     if ENABLE_LOGGING:
         logger.info("CORS Proxy started on port %d", port)
 
-    server_thread.join()  # Keep the main thread alive
+    # Wait for the server thread to finish
+    server_thread.join()
 
 if __name__ == "__main__":
     run()
