@@ -177,7 +177,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     def add_cors_headers(self):
         """Add CORS headers to the response."""
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', '*')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.send_header('Access-Control-Allow-Credentials', 'true')
         if CONFIG["corsMaxAge"] > 0:
