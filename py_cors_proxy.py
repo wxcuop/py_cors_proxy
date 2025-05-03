@@ -192,13 +192,17 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def add_cors_headers(self):
         """Add CORS headers to the response."""
+        # Remove any existing Access-Control-Allow-Origin header to avoid duplication
+        if "Access-Control-Allow-Origin" in self.headers:
+            self.headers.pop("Access-Control-Allow-Origin")
+        
+        # Add CORS headers
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Allow-Credentials", "true")
         if CONFIG["corsMaxAge"] > 0:
             self.send_header("Access-Control-Max-Age", str(CONFIG["corsMaxAge"]))
-
     def add_expose_headers(self, response):
         """Dynamically add Access-Control-Expose-Headers based on response headers."""
         exposed_headers = ", ".join(header for header, _ in response.getheaders())  # Extract only the header names
