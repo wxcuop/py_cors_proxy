@@ -170,6 +170,16 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             if not location:
                 raise Exception("Redirect without Location header")
             new_url = urljoin(url, location)
+    
+            # Modify the request method and headers for GET requests
+            self.command = 'GET'
+            headers['Content-Length'] = '0'
+            if 'Content-Type' in headers:
+                del headers['Content-Type']
+    
+            if ENABLE_LOGGING:
+                logger.info(f"Redirecting to {new_url} with updated headers: {headers}")
+    
             return self.forward_request(new_url)
 
         return response
