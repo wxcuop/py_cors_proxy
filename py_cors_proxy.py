@@ -10,7 +10,7 @@ import select  # For handling timeouts in the loop
 from collections import defaultdict
 import time
 import threading
-
+shutdown_event = threading.Event()  # Event to signa
 # Configuration
 MAX_REDIRECTS = 5  # Maximum number of redirects allowed
 ENABLE_LOGGING = True  # Set to False to disable logging
