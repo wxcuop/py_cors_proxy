@@ -6,6 +6,7 @@ import signal
 import sys
 import zlib
 import json
+import select  # For handling timeouts in the loop
 from collections import defaultdict
 import time
 
@@ -220,32 +221,30 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         return False
 
 
-def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080, use_https=False):
+def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
     global httpd
     server_address = ("", port)
     httpd = server_class(server_address, handler_class)
 
-    # Define a signal handler for graceful shutdown
     def signal_handler(sig, frame):
         print("\nShutting down the server...")
-        httpd.shutdown()  # Stop the server gracefully
-        httpd.server_close()  # Release the port and close the socket
+        httpd.shutdown()  # Gracefully stop the server
+        httpd.server_close()  # Close the server's socket
         sys.exit(0)
 
     # Register the signal handler for SIGINT (Ctrl+C)
     signal.signal(signal.SIGINT, signal_handler)
 
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
-    if ENABLE_LOGGING:
-        logger.info("CORS Proxy started on port %d", port)
 
     try:
-        # Custom loop to handle non-blocking requests
         while True:
-            httpd.handle_request()  # Process one request at a time
+            # Use select to set a timeout for socket operations
+            r, w, e = select.select([httpd.socket], [], [], 1)
+            if r:
+                httpd.handle_request()
     except KeyboardInterrupt:
-        # Ensure graceful shutdown on Ctrl+C
         signal_handler(None, None)
 
 if __name__ == "__main__":
