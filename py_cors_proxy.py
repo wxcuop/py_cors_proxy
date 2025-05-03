@@ -221,54 +221,34 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
         return False
 
-shutdown_event = threading.Event()  # Event to signal shutdown
-
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
-    global server_running
-    server_running = True  # Flag to check if the server is running
-
     server_address = ("", port)
     httpd = server_class(server_address, handler_class)
 
-    # Start the server in a separate thread
-    def serve_forever():
-        with httpd:
-            httpd.serve_forever()
-
-    server_thread = threading.Thread(target=serve_forever)
-    server_thread.start()
-
-    # Signal handler to stop the server
-    def stop_server():
-        global server_running
-        print("\nShutting down the server...")
-        server_running = False
-        httpd.shutdown()
-        httpd.server_close()
+    # Handle SIGINT (Ctrl+C) to gracefully shut down the server
+    def signal_handler(sig, frame):
+        print("\nCtrl+C detected. Shutting down the server...")
         shutdown_event.set()  # Signal the shutdown event
-        server_thread.join()
+        httpd.shutdown()     # Gracefully stop the server
+        httpd.server_close() # Close the server socket
         print("Server stopped.")
+        sys.exit(0)
 
-    # Listen for shutdown signals
-    def shutdown_listener():
-        while server_running:
-            try:
-                # Wait until the shutdown event is set
-                shutdown_event.wait()
-            except KeyboardInterrupt:
-                stop_server()
-                break
-
-    shutdown_thread = threading.Thread(target=shutdown_listener)
-    shutdown_thread.daemon = True
-    shutdown_thread.start()
+    signal.signal(signal.SIGINT, signal_handler)
 
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
     if ENABLE_LOGGING:
         logger.info("CORS Proxy started on port %d", port)
 
-    # Wait for the server thread to finish
+    # Run the server in a separate thread
+    server_thread = threading.Thread(target=httpd.serve_forever)
+    server_thread.start()
+
+    # Wait for the shutdown_event to be set
+    shutdown_event.wait()
+
+    # Wait for the server thread to terminate
     server_thread.join()
     
 if __name__ == "__main__":
