@@ -120,7 +120,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     
             # Add response headers, excluding sensitive ones and conflicting CORS headers
             for header, value in response.getheaders():
-                if header.lower() not in ["set-cookie", "set-cookie2", "access-control-allow-origin"]:
+                if header.lower() not in ["set-cookie", "set-cookie2", "access-control-allow-origin", "content-encoding"]:
                     self.send_header(header, value)
     
             # Add your own CORS headers
@@ -130,18 +130,17 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
     
             # Stream the response body
             content_encoding = response.getheader("Content-Encoding", "").lower()
-            while chunk := response.read(8192):
-                try:
-                    if content_encoding == "gzip":
-                        chunk = zlib.decompress(chunk, zlib.MAX_WBITS | 16)
-                    elif content_encoding == "deflate":
-                        chunk = zlib.decompress(chunk)
-                    # Write the (decompressed) chunk to the client
-                    self.wfile.write(chunk)
-                except zlib.error as e:
-                    # If decompression fails, log the error and forward raw data
-                    if ENABLE_LOGGING:
-                        logger.error(f"Decompression error: {str(e)}")
+            if content_encoding in ["gzip", "deflate"]:
+                # Decompress response if it's compressed
+                decompressor = zlib.decompressobj(
+                    zlib.MAX_WBITS | 16 if content_encoding == "gzip" else -zlib.MAX_WBITS
+                )
+                while chunk := response.read(8192):
+                    self.wfile.write(decompressor.decompress(chunk))
+                self.wfile.write(decompressor.flush())  # Flush remaining data
+            else:
+                # Forward the response as-is if not compressed
+                while chunk := response.read(8192):
                     self.wfile.write(chunk)
     
             if ENABLE_LOGGING:
