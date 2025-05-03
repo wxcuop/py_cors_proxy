@@ -203,7 +203,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Credentials", "true")
         if CONFIG["corsMaxAge"] > 0:
             self.send_header("Access-Control-Max-Age", str(CONFIG["corsMaxAge"]))
-            
+        print(f"Headers again: {self.headers}")
     def add_expose_headers(self, response):
         """Dynamically add Access-Control-Expose-Headers based on response headers."""
         exposed_headers = ", ".join(header for header, _ in response.getheaders())  # Extract only the header names
