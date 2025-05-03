@@ -248,4 +248,4 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
         signal_handler(None, None)
 
 if __name__ == "__main__":
-    run(use_https=False)
+    run()
