@@ -223,6 +223,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080):
     """Run the CORS proxy server."""
+    global shutdown_event  # Ensure the shutdown_event is accessible
     server_address = ("", port)
     httpd = server_class(server_address, handler_class)
 
