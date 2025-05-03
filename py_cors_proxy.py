@@ -228,10 +228,9 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
 
     # Define a signal handler for graceful shutdown
     def signal_handler(sig, frame):
-        print("\nSignal handler invoked. Shutting down the server...")
-
+        print("\nShutting down the server...")
         httpd.shutdown()  # Stop the server gracefully
-        httpd.server_close()  # Ensure the socket is released
+        httpd.server_close()  # Release the port and close the socket
         sys.exit(0)
 
     # Register the signal handler for SIGINT (Ctrl+C)
@@ -240,12 +239,13 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
     if ENABLE_LOGGING:
         logger.info("CORS Proxy started on port %d", port)
+
     try:
-        # Use a polling loop instead of serve_forever
+        # Custom loop to handle non-blocking requests
         while True:
-            httpd.handle_request()
+            httpd.handle_request()  # Process one request at a time
     except KeyboardInterrupt:
-        # Handle any leftover interruptions
+        # Ensure graceful shutdown on Ctrl+C
         signal_handler(None, None)
 
 if __name__ == "__main__":
