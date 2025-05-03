@@ -222,15 +222,25 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
 def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, port=8080, use_https=False):
     """Run the CORS proxy server."""
+    global httpd
     server_address = ("", port)
     httpd = server_class(server_address, handler_class)
+
+    # Define a signal handler for graceful shutdown
+    def signal_handler(sig, frame):
+        print("\nShutting down the server...")
+        httpd.shutdown()  # Stop the server gracefully
+        sys.exit(0)
+
+    # Register the signal handler for SIGINT (Ctrl+C)
+    signal.signal(signal.SIGINT, signal_handler)
 
     print(f"Starting CORS Proxy on port {port}... Press Ctrl+C to stop.")
     if ENABLE_LOGGING:
         logger.info("CORS Proxy started on port %d", port)
 
+    # Start the server
     httpd.serve_forever()
 
-
 if __name__ == "__main__":
-    run()
+    run(use_https=False)
