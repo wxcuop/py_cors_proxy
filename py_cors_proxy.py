@@ -192,10 +192,12 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def add_cors_headers(self):
         """Add CORS headers to the response."""
-
-        print(self.headers.get("Access-Control-Allow-Origin")) 
+        # Log existing headers for debugging
+        print(f"Existing headers: {self.headers}")
+        
+        # Dynamically set the Access-Control-Allow-Origin header
         origin = self.headers.get("Origin", "*")  # Use the request's origin or default to "*"
-        self.send_header("Access-Control-Allow-Origin", origin)  # Dynamically set the origin
+        self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Allow-Credentials", "true")
