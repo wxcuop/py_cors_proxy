@@ -201,7 +201,7 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def add_expose_headers(self, response):
         """Dynamically add Access-Control-Expose-Headers based on response headers."""
-        exposed_headers = ", ".join(header for header in response.getheaders())
+        exposed_headers = ", ".join(header for header, _ in response.getheaders())  # Extract only the header names
         self.send_header("Access-Control-Expose-Headers", exposed_headers)
 
     def rate_limit_check(self, origin):
