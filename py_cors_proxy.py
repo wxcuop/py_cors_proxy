@@ -228,7 +228,7 @@ def run(server_class=http.server.HTTPServer, handler_class=CORSProxyHandler, por
 
     # Define a signal handler for graceful shutdown
     def signal_handler(sig, frame):
-         print("\nSignal handler invoked. Shutting down the server...")
+        print("\nSignal handler invoked. Shutting down the server...")
 
         httpd.shutdown()  # Stop the server gracefully
         httpd.server_close()  # Ensure the socket is released
