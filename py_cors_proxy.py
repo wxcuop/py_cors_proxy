@@ -129,13 +129,20 @@ class CORSProxyHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
     
             # Stream the response body
-            content_encoding = response.getheader("Content-Encoding", "")
+            content_encoding = response.getheader("Content-Encoding", "").lower()
             while chunk := response.read(8192):
-                if content_encoding == "gzip":
-                    chunk = zlib.decompress(chunk, zlib.MAX_WBITS | 16)
-                elif content_encoding == "deflate":
-                    chunk = zlib.decompress(chunk)
-                self.wfile.write(chunk)
+                try:
+                    if content_encoding == "gzip":
+                        chunk = zlib.decompress(chunk, zlib.MAX_WBITS | 16)
+                    elif content_encoding == "deflate":
+                        chunk = zlib.decompress(chunk)
+                    # Write the (decompressed) chunk to the client
+                    self.wfile.write(chunk)
+                except zlib.error as e:
+                    # If decompression fails, log the error and forward raw data
+                    if ENABLE_LOGGING:
+                        logger.error(f"Decompression error: {str(e)}")
+                    self.wfile.write(chunk)
     
             if ENABLE_LOGGING:
                 logger.info(f"Response forwarded with status {response.status} for {target_url}")
